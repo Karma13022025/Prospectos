@@ -1,7 +1,9 @@
 """
 app.py - Prospección de restaurantes (versión nube: Streamlit Cloud + Supabase).
 """
+import csv
 import datetime
+import io
 import os
 import re
 import time
@@ -157,7 +159,7 @@ def correr_apify(token, terminos, ubicacion, max_lugares, tope, log):
     return items.json()
 
 
-def redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas):
+def redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas, indicaciones=""):
     sistema = (
         "Eres un vendedor local de Saltillo, México, que escribe mensajes de WhatsApp "
         "cortos y naturales a dueños de restaurantes. Ofreces: (1) un menú digital "
@@ -169,6 +171,11 @@ def redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas):
         "ejemplo de menú digital sin compromiso; termina con una pregunta corta; "
         f"firma con el nombre {tu_nombre or '[tu nombre]'}."
     )
+    if indicaciones.strip():
+        sistema += (
+            "\n\nIndicaciones extra del vendedor sobre el enfoque o el tono del mensaje "
+            "(síguelas, pero sin romper las reglas anteriores): " + indicaciones.strip()
+        )
     usuario = (f'Restaurante: "{nombre}". Tipo de negocio: {categoria or "restaurante"}. '
                f"Calificación en Google: {rating}. Reseñas: {resenas}.")
     resp = cliente.chat.completions.create(
@@ -202,6 +209,12 @@ with tab1:
     max_nuevos = c4.slider("Mensajes a redactar", 1, 30, 5)
     max_resenas = c5.number_input("Máx. reseñas", 0, 1000, 60)
     tope = c6.number_input("Tope de gasto Apify (USD)", min_value=0.1, max_value=5.0, value=1.0, step=0.1)
+    indicaciones = st.text_area(
+        "Cómo quieres el mensaje (opcional)",
+        placeholder="Ej: más corto y casual, empieza preguntando si hablo con el dueño, "
+                    "menciona que el menú digital tiene código QR...",
+        height=90,
+    )
     st.caption("Apify cobra cada lugar que trae, aunque ya lo tengas. Para no repetir, "
                "cambia la zona o el término cada vez (ej. 'Colonia República, Saltillo', "
                "'taquerías', 'cafeterías').")
@@ -236,7 +249,7 @@ with tab1:
                         categoria = col(fila, "categoryName", "category")
                         rating = col(fila, "totalScore", "rating") or "N/D"
                         resenas = a_entero(col(fila, "reviewsCount", "reviews"))
-                        mensaje = redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas)
+                        mensaje = redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas, indicaciones)
                         nuevas.append({
                             "place_id": pid, "nombre": nombre, "categoria": categoria,
                             "direccion": col(fila, "address", "street"), "telefono": telefono,
@@ -262,16 +275,31 @@ with tab2:
         for c, e in zip(st.columns(len(ESTADOS)), ESTADOS):
             c.metric(e.capitalize(), conteo[e])
 
-                if st.button("Enviar a Google Sheets"):
-            datos = [CAMPOS] + [[str(f.get(c, "")) for c in CAMPOS] for f in filas.values()]
-            r = requests.post(secreto("SHEETS_URL"),
-                              json={"token": secreto("SHEETS_TOKEN"), "filas": datos}, timeout=60)
-            if r.text.strip() == "ok":
-                st.success("Hoja actualizada.")
+        x1, x2, _ = st.columns([1, 1, 4])
+        buffer = io.StringIO()
+        w = csv.DictWriter(buffer, fieldnames=CAMPOS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(filas.values())
+        x1.download_button("Descargar CSV", buffer.getvalue().encode("utf-8-sig"),
+                           file_name="prospectos.csv", mime="text/csv")
+        if x2.button("Enviar a Google Sheets"):
+            if not secreto("SHEETS_URL"):
+                st.error("Falta SHEETS_URL en los Secrets.")
             else:
-                st.error(f"Respuesta: {r.text[:200]}")
+                try:
+                    datos = [CAMPOS] + [[str(f.get(c, "")) for c in CAMPOS] for f in filas.values()]
+                    r = requests.post(secreto("SHEETS_URL"),
+                                      json={"token": secreto("SHEETS_TOKEN"), "filas": datos}, timeout=60)
+                    if r.text.strip() == "ok":
+                        st.success("Hoja actualizada.")
+                    else:
+                        st.error(f"Respuesta: {r.text[:200]}")
+                except Exception as e:  # noqa: BLE001
+                    st.error(f"No se pudo enviar: {e}")
 
         filtro = st.multiselect("Mostrar", ESTADOS, default=["nuevo"])
+        st.text_input("Indicación para regenerar mensajes (opcional)", key="indicaciones_regen",
+                      placeholder="Ej: más corto, tono más formal...")
         for pid, f in filas.items():
             if f["estado"] not in filtro:
                 continue
@@ -282,8 +310,18 @@ with tab2:
                     st.markdown(f"[Ver en Google Maps]({f['maps']})")
                 msg = st.text_area("Mensaje (puedes editarlo)", value=f["mensaje"],
                                    key=f"msg_{pid}", height=140)
-                b1, b2, b3, _ = st.columns([1, 1, 1, 3])
+                b1, b2, b3, b4, _ = st.columns([1, 1, 1, 1, 2])
                 b1.link_button("Abrir WhatsApp", link_whatsapp(f["telefono"], msg))
+                if b4.button("Regenerar", key=f"reg_{pid}"):
+                    if not openai_key:
+                        st.error("Falta la clave de OpenAI.")
+                    else:
+                        nuevo = redactar(OpenAI(api_key=openai_key), modelo, tu_nombre,
+                                         f["nombre"], f["categoria"], f["rating"],
+                                         f["num_resenas"], st.session_state.get("indicaciones_regen", ""))
+                        actualizar(pid, mensaje=nuevo)
+                        st.session_state.pop(f"msg_{pid}", None)
+                        st.rerun()
                 if b2.button("Ya lo envié", key=f"env_{pid}"):
                     actualizar(pid, mensaje=msg, estado="contactado",
                                fecha_contacto=datetime.date.today().isoformat())
