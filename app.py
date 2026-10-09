@@ -262,6 +262,15 @@ with tab2:
         for c, e in zip(st.columns(len(ESTADOS)), ESTADOS):
             c.metric(e.capitalize(), conteo[e])
 
+                if st.button("Enviar a Google Sheets"):
+            datos = [CAMPOS] + [[str(f.get(c, "")) for c in CAMPOS] for f in filas.values()]
+            r = requests.post(secreto("SHEETS_URL"),
+                              json={"token": secreto("SHEETS_TOKEN"), "filas": datos}, timeout=60)
+            if r.text.strip() == "ok":
+                st.success("Hoja actualizada.")
+            else:
+                st.error(f"Respuesta: {r.text[:200]}")
+
         filtro = st.multiselect("Mostrar", ESTADOS, default=["nuevo"])
         for pid, f in filas.items():
             if f["estado"] not in filtro:
