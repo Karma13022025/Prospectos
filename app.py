@@ -47,7 +47,7 @@ ESTILO = """
   font-family:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
 input, textarea, button { font-family:inherit !important; }
 footer, [data-testid="stDecoration"] { display:none !important; }
-.block-container { padding-top:1.6rem; padding-bottom:3rem; max-width:1280px; }
+.block-container { padding-top:4.5rem; padding-bottom:3rem; max-width:1280px; }
 [data-testid="stSidebar"] { background:#E3E7EC; border-right:1px solid var(--line); }
  
 /* Encabezado y embudo */
