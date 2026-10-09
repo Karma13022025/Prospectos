@@ -8,33 +8,36 @@ import os
 import re
 import time
 from urllib.parse import quote
-
+ 
 import requests
 import streamlit as st
 from openai import OpenAI
-
+ 
 CAMPOS = [
     "place_id", "nombre", "categoria", "direccion", "telefono", "rating", "num_resenas",
     "web", "maps", "mensaje", "link_whatsapp", "estado", "fecha_contacto",
 ]
 ESTADOS = ["nuevo", "contactado", "respondio", "cliente", "descartado"]
+# Columnas que se mandan a Google Sheets (place_id debe ir primero: es la llave).
+COLUMNAS_HOJA = ["place_id", "nombre", "telefono", "categoria", "rating",
+                 "num_resenas", "estado", "fecha_contacto", "maps", "mensaje"]
 API = "https://api.apify.com/v2"
 ACTOR = "compass~crawler-google-places"
 MENSAJE_SEGUIMIENTO = (
     "Hola, buen día. Solo paso a preguntar si pudo ver mi mensaje sobre el menú "
     "digital. Con gusto les preparo un ejemplo con sus platillos, sin compromiso."
 )
-
+ 
 st.set_page_config(page_title="Prospección de restaurantes", page_icon="🍽️", layout="wide")
-
-
+ 
+ 
 def secreto(nombre, defecto=""):
     try:
         return str(st.secrets[nombre])
     except Exception:  # noqa: BLE001
         return os.getenv(nombre, defecto)
-
-
+ 
+ 
 # ---------------------------------------------------------------- login
 def pedir_login():
     clave = secreto("APP_PASSWORD")
@@ -50,11 +53,11 @@ def pedir_login():
     elif intento:
         st.error("Contraseña incorrecta.")
     st.stop()
-
-
+ 
+ 
 pedir_login()
-
-
+ 
+ 
 # ---------------------------------------------------------------- utilidades
 def col(fila, *nombres):
     for n in nombres:
@@ -62,27 +65,27 @@ def col(fila, *nombres):
         if v not in (None, ""):
             return str(v).strip()
     return ""
-
-
+ 
+ 
 def a_entero(valor):
     try:
         return int(float(valor))
     except (TypeError, ValueError):
         return 0
-
-
+ 
+ 
 def esta_cerrado(fila):
     return any(col(fila, c).lower() in ("true", "1", "yes")
                for c in ("permanentlyClosed", "temporarilyClosed"))
-
-
+ 
+ 
 def link_whatsapp(telefono, mensaje):
     digitos = re.sub(r"\D", "", telefono or "")
     if len(digitos) == 10:
         digitos = "52" + digitos
     return f"https://wa.me/{digitos}?text={quote(mensaje)}" if digitos else ""
-
-
+ 
+ 
 # ---------------------------------------------------------------- Supabase
 def _sb():
     url = secreto("SUPABASE_URL").rstrip("/") + "/rest/v1/prospectos"
@@ -90,15 +93,15 @@ def _sb():
     headers = {"apikey": key, "Authorization": f"Bearer {key}",
                "Content-Type": "application/json"}
     return url, headers
-
-
+ 
+ 
 def cargar():
     url, headers = _sb()
     r = requests.get(url, headers=headers, params={"select": "*", "limit": 10000}, timeout=60)
     r.raise_for_status()
     return {fila["place_id"]: fila for fila in r.json()}
-
-
+ 
+ 
 def guardar_nuevos(filas_nuevas):
     """Inserta o actualiza varias filas a la vez."""
     if not filas_nuevas:
@@ -109,8 +112,8 @@ def guardar_nuevos(filas_nuevas):
     r = requests.post(url, headers=headers, params={"on_conflict": "place_id"},
                       json=cuerpo, timeout=60)
     r.raise_for_status()
-
-
+ 
+ 
 def actualizar(place_id, **cambios):
     if "mensaje" in cambios:
         filas = cargar()
@@ -120,8 +123,8 @@ def actualizar(place_id, **cambios):
     r = requests.patch(url, headers=headers, params={"place_id": f"eq.{place_id}"},
                        json=cambios, timeout=60)
     r.raise_for_status()
-
-
+ 
+ 
 # ------------------------------------------------------- Apify y OpenAI
 def correr_apify(token, terminos, ubicacion, max_lugares, tope, log):
     headers = {"Authorization": f"Bearer {token}"}
@@ -137,7 +140,7 @@ def correr_apify(token, terminos, ubicacion, max_lugares, tope, log):
     r.raise_for_status()
     run_id = r.json()["data"]["id"]
     log("Búsqueda iniciada en Apify. Esperando resultados...")
-
+ 
     limite = time.time() + 15 * 60
     while True:
         time.sleep(5)
@@ -152,13 +155,13 @@ def correr_apify(token, terminos, ubicacion, max_lugares, tope, log):
             break
     if estado != "SUCCEEDED":
         log(f"La corrida terminó con estado {estado}. Descargo lo que haya.")
-
+ 
     items = requests.get(f"{API}/datasets/{data['defaultDatasetId']}/items", headers=headers,
                          params={"format": "json", "clean": "true"}, timeout=120)
     items.raise_for_status()
     return items.json()
-
-
+ 
+ 
 def redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas, indicaciones=""):
     sistema = (
         "Eres un vendedor local de Saltillo, México, que escribe mensajes de WhatsApp "
@@ -184,8 +187,8 @@ def redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas, ind
         temperature=0.8,
     )
     return resp.choices[0].message.content.strip()
-
-
+ 
+ 
 # ---------------------------------------------------------------- barra lateral
 with st.sidebar:
     st.header("Configuración")
@@ -194,10 +197,10 @@ with st.sidebar:
     tu_nombre = st.text_input("Tu nombre (firma del mensaje)", value=secreto("TU_NOMBRE"))
     modelo = st.text_input("Modelo de OpenAI", value=secreto("OPENAI_MODEL", "gpt-4o-mini"))
     dias_seg = st.number_input("Días antes del seguimiento", min_value=1, max_value=14, value=2)
-
+ 
 st.title("🍽️ Prospección de restaurantes")
 tab1, tab2, tab3 = st.tabs(["1. Buscar prospectos", "2. Prospectos", "3. Seguimientos"])
-
+ 
 # ---------------------------------------------------------------- pestaña 1
 with tab1:
     st.write("Busca restaurantes nuevos y deja los mensajes listos para enviar.")
@@ -218,7 +221,7 @@ with tab1:
     st.caption("Apify cobra cada lugar que trae, aunque ya lo tengas. Para no repetir, "
                "cambia la zona o el término cada vez (ej. 'Colonia República, Saltillo', "
                "'taquerías', 'cafeterías').")
-
+ 
     if st.button("Buscar y redactar mensajes", type="primary"):
         if not (apify_token and openai_key):
             st.error("Faltan el token de Apify o la clave de OpenAI (barra lateral).")
@@ -242,7 +245,7 @@ with tab1:
                         candidatos.append((pid, nombre, telefono, fila))
                     candidatos.sort(key=lambda c: a_entero(col(c[3], "reviewsCount", "reviews")))
                     st.write(f"Prospectos nuevos con teléfono y ≤ {max_resenas} reseñas: {len(candidatos)}")
-
+ 
                     cliente = OpenAI(api_key=openai_key)
                     nuevas = []
                     for pid, nombre, telefono, fila in candidatos[:max_nuevos]:
@@ -264,7 +267,7 @@ with tab1:
                 st.success(f"Se agregaron {len(nuevas)} prospectos. Ve a la pestaña 'Prospectos'.")
             except Exception as e:  # noqa: BLE001
                 st.error(f"Algo falló: {e}")
-
+ 
 # ---------------------------------------------------------------- pestaña 2
 with tab2:
     filas = cargar()
@@ -274,7 +277,7 @@ with tab2:
         conteo = {e: sum(1 for f in filas.values() if f["estado"] == e) for e in ESTADOS}
         for c, e in zip(st.columns(len(ESTADOS)), ESTADOS):
             c.metric(e.capitalize(), conteo[e])
-
+ 
         x1, x2, _ = st.columns([1, 1, 4])
         buffer = io.StringIO()
         w = csv.DictWriter(buffer, fieldnames=CAMPOS, extrasaction="ignore")
@@ -287,7 +290,7 @@ with tab2:
                 st.error("Falta SHEETS_URL en los Secrets.")
             else:
                 try:
-                    datos = [CAMPOS] + [[str(f.get(c, "")) for c in CAMPOS] for f in filas.values()]
+                    datos = [COLUMNAS_HOJA] + [[str(f.get(c, "")) for c in COLUMNAS_HOJA] for f in filas.values()]
                     r = requests.post(secreto("SHEETS_URL"),
                                       json={"token": secreto("SHEETS_TOKEN"), "filas": datos}, timeout=60)
                     if r.text.strip() == "ok":
@@ -296,7 +299,7 @@ with tab2:
                         st.error(f"Respuesta: {r.text[:200]}")
                 except Exception as e:  # noqa: BLE001
                     st.error(f"No se pudo enviar: {e}")
-
+ 
         filtro = st.multiselect("Mostrar", ESTADOS, default=["nuevo"])
         st.text_input("Indicación para regenerar mensajes (opcional)", key="indicaciones_regen",
                       placeholder="Ej: más corto, tono más formal...")
@@ -329,7 +332,7 @@ with tab2:
                 if b3.button("Descartar", key=f"desc_{pid}"):
                     actualizar(pid, estado="descartado")
                     st.rerun()
-
+ 
 # ---------------------------------------------------------------- pestaña 3
 with tab3:
     filas = cargar()
@@ -344,7 +347,7 @@ with tab3:
             continue
         if (hoy - fecha).days >= dias_seg:
             pendientes.append((pid, f, (hoy - fecha).days))
-
+ 
     if not pendientes:
         st.info("No tienes seguimientos pendientes por hoy.")
     for pid, f, dias in pendientes:
@@ -362,3 +365,9 @@ with tab3:
             if b4.button("Descartar", key=f"sdesc_{pid}"):
                 actualizar(pid, estado="descartado")
                 st.rerun()
+ 
+
+
+
+
+
