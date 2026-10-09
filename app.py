@@ -28,6 +28,12 @@ COLOR = {"nuevo": "#1D4E89", "contactado": "#A86A00", "respondio": "#1F7A5A",
          "cliente": "#14532D", "descartado": "#8A94A0"}
 API = "https://api.apify.com/v2"
 ACTOR = "compass~crawler-google-places"
+MENSAJE_EJEMPLO = (
+    "Hola, buen día. Soy Horacio Balderas. Hago menús digitales para restaurantes (un QR en la "
+    "mesa, y cambias los precios al momento sin reimprimir). Encontré [nombre del restaurante] "
+    "en Google Maps y pensé que te podría servir. ¿Te mando un ejemplo? Si no es buen momento, "
+    "sin problema."
+)
 MENSAJE_SEGUIMIENTO = (
     "Hola, buen día. Solo paso a preguntar si pudo ver mi mensaje sobre el menú "
     "digital. Con gusto les preparo un ejemplo con sus platillos, sin compromiso."
@@ -66,6 +72,7 @@ footer, [data-testid="stDecoration"] { display:none !important; }
 /* Pestañas */
 [data-testid="stTabs"] { margin-top:.6rem; }
 [data-testid="stTabs"] button[role="tab"] { font-weight:500; font-size:.95rem; }
+[data-testid="stTabs"] button[role="tab"]:focus { outline:none; box-shadow:none; }
  
 /* Paneles */
 [data-testid="stVerticalBlockBorderWrapper"] { background:var(--surface);
@@ -265,29 +272,32 @@ def correr_apify(token, terminos, ubicacion, max_lugares, tope, log):
  
 def redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas, indicaciones=""):
     sistema = (
-        "Eres un vendedor local de Saltillo, México, que escribe mensajes de WhatsApp "
-        "cortos y naturales a dueños de restaurantes. Ofreces: (1) un menú digital "
-        "que el cliente ve en su celular y (2) una tarjeta NFC que lleva directo a las "
-        "reseñas de Google Maps. Reglas: máximo 60 palabras; tono amable y normal, "
-        "como persona real (nada de frases de vendedor ni exageraciones); máximo 1 emoji; "
-        "NO inventes datos del restaurante ni menciones platillos; NO digas que ya tienes "
-        "las tarjetas en mano; NO critiques su número de reseñas; ofrece preparar un "
-        "ejemplo de menú digital sin compromiso; termina con una pregunta corta; "
-        f"firma con el nombre {tu_nombre or '[tu nombre]'}."
+        "Escribes el primer mensaje de WhatsApp de un vendedor local de Saltillo, México, a un "
+        "restaurante. Debes seguir como MODELO el siguiente mensaje, con la misma estructura, el "
+        "mismo tono y casi el mismo largo:\n\n"
+        f"{MENSAJE_EJEMPLO}\n\n"
+        "Reglas: sustituye [nombre del restaurante] por el nombre real del restaurante; firma con "
+        f"el nombre {tu_nombre or '[tu nombre]'} en lugar de 'Horacio Balderas'; máximo 60 palabras; "
+        "puedes variar un poco las palabras para que no sea idéntico entre restaurantes, sin "
+        "cambiar el significado; conserva la pregunta '¿Te mando un ejemplo?' y la salida amable "
+        "'Si no es buen momento, sin problema'; NO menciones la tarjeta NFC, ni precios, ni "
+        "reseñas, ni platillos; NO inventes datos del restaurante; máximo 1 emoji (opcional); "
+        "responde solo con el mensaje, sin comillas ni explicaciones."
     )
     if indicaciones.strip():
         sistema += (
-            "\n\nIndicaciones extra del vendedor sobre el enfoque o el tono del mensaje "
-            "(síguelas, pero sin romper las reglas anteriores): " + indicaciones.strip()
+            "\n\nIndicaciones extra del vendedor (síguelas sin romper las reglas anteriores): "
+            + indicaciones.strip()
         )
-    usuario = (f'Restaurante: "{nombre}". Tipo de negocio: {categoria or "restaurante"}. '
-               f"Calificación en Google: {rating}. Reseñas: {resenas}.")
+    usuario = f'Restaurante: "{nombre}". Tipo de negocio: {categoria or "restaurante"}.'
     resp = cliente.chat.completions.create(
         model=modelo,
         messages=[{"role": "system", "content": sistema}, {"role": "user", "content": usuario}],
-        temperature=0.8,
+        temperature=0.4,
     )
-    return resp.choices[0].message.content.strip()
+    mensaje = resp.choices[0].message.content.strip().strip('"')
+    # Seguro contra el error de mandar la plantilla sin llenar
+    return mensaje.replace("[nombre del restaurante]", nombre)
  
  
 def redactar_seguimiento(cliente, modelo, tu_nombre, nombre, categoria, mensaje_anterior,
