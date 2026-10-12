@@ -29,7 +29,7 @@ COLOR = {"nuevo": "#1D4E89", "contactado": "#A86A00", "respondio": "#1F7A5A",
 API = "https://api.apify.com/v2"
 ACTOR = "compass~crawler-google-places"
 MENSAJE_EJEMPLO = (
-    "Hola, qué tal! Soy Horacio. Una duda rápida: cuando suben un precio o se acaba algo del menú, ¿cómo lo cambian? Lo pregunto porque ayudo a cafeterías con menús digitales por QR que se editan al momento. Si te late la idea, te armo un ejemplo con el menú de ( nombre de negocio ) para que lo veas. Si no, gracias por leerme!"
+ "Hola! Soy Horacio, trabajo con negocios de Saltillo creando menus digitales. Me gustaría prepararles uno de ejemplo con su carta, sin ningún compromiso. ¿A quién le puedo escribir de esto?"
 )
 MENSAJE_SEGUIMIENTO = (
     "Hola, buen día. Solo paso a preguntar si pudo ver mi mensaje sobre el menú "
@@ -274,10 +274,10 @@ def redactar(cliente, modelo, tu_nombre, nombre, categoria, rating, resenas, ind
         "mismo tono y casi el mismo largo:\n\n"
         f"{MENSAJE_EJEMPLO}\n\n"
         "Reglas: sustituye [nombre del restaurante] por el nombre real del restaurante; firma con "
-        f"el nombre {tu_nombre or '[tu nombre]'} en lugar de 'Horacio Balderas'; máximo 60 palabras; "
+        f"el nombre {tu_nombre or '[tu nombre]'} en lugar de 'Horacio Balderas'; máximo 30 palabras; "
         "puedes variar un poco las palabras para que no sea idéntico entre restaurantes, sin "
-        "cambiar el significado; conserva la pregunta '¿Te mando un ejemplo?' y la salida amable "
-        "'Si no es buen momento, sin problema'; NO menciones la tarjeta NFC, ni precios, ni "
+        "cambiar el significado; y la salida amable "
+        " NO menciones la tarjeta NFC, ni precios, ni "
         "reseñas, ni platillos; NO inventes datos del restaurante; máximo 1 emoji (opcional); "
         "responde solo con el mensaje, sin comillas ni explicaciones."
     )
