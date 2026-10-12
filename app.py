@@ -29,10 +29,7 @@ COLOR = {"nuevo": "#1D4E89", "contactado": "#A86A00", "respondio": "#1F7A5A",
 API = "https://api.apify.com/v2"
 ACTOR = "compass~crawler-google-places"
 MENSAJE_EJEMPLO = (
-    "Hola, buen día. Soy Horacio Balderas. Hago menús digitales para restaurantes (un QR en la "
-    "mesa, y cambias los precios al momento sin reimprimir). Encontré [nombre del restaurante] "
-    "en Google Maps y pensé que te podría servir. ¿Te mando un ejemplo? Si no es buen momento, "
-    "sin problema."
+    "Hola, qué tal! Soy Horacio. Una duda rápida: cuando suben un precio o se acaba algo del menú, ¿cómo lo cambian? Lo pregunto porque ayudo a cafeterías con menús digitales por QR que se editan al momento. Si te late la idea, te armo un ejemplo con el menú de ( nombre de negocio ) para que lo veas. Si no, gracias por leerme!"
 )
 MENSAJE_SEGUIMIENTO = (
     "Hola, buen día. Solo paso a preguntar si pudo ver mi mensaje sobre el menú "
